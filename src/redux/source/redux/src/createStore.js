@@ -20,7 +20,7 @@ import isPlainObject from './utils/isPlainObject'
  * previously serialized user session.
  * If you use `combineReducers` to produce the root reducer function, this must be
  * an object with the same shape as `combineReducers` keys.
- * [preloadedState] (any): 初始时的 state。 
+ * [preloadedState] (any): 初始时的 state。
  * 在同构应用中，你可以决定是否把服务端传来的 state 水合（hydrate）后传给它，
  * 或者从之前保存的用户会话中恢复一个传给它。如果你使用 combineReducers 创建 reducer，
  * 它必须是一个普通对象，与传入的 keys 保持同样的结构。否则，你可以自由传入任何 reducer 可理解的内容。
@@ -46,7 +46,7 @@ export default function createStore(reducer, preloadedState, enhancer) {
     if (typeof enhancer !== 'function') {
       throw new Error('Expected the enhancer to be a function.')
     }
-    // 增强函数，使用compose返回后的函数
+    // 增强函数，使用applyMiddlewarea对createStore进行包装
     return enhancer(createStore)(reducer, preloadedState)
   }
   // reducer必须为一个函数
@@ -56,14 +56,16 @@ export default function createStore(reducer, preloadedState, enhancer) {
 
   let currentReducer = reducer // 保存传递进来的reducer
   let currentState = preloadedState // 保存初始化的reducer
-  let currentListeners = [] // 订阅列表
+  let currentListeners = [] // 当前订阅列表
   let nextListeners = currentListeners // 下一个订阅列表
-  let isDispatching = false // 是否在订阅中
+  let isDispatching = false // 是否处理reducer中 相见：https://redux.js.org/api-reference/createstore
 
-  // 确保可以获得订阅者
+  // 确保可以改变下一个监听器
   function ensureCanMutateNextListeners() {
+    // 只有当nextListeners等于currentListeners的时候获取一个监听事件列表的拷贝
     if (nextListeners === currentListeners) {
-      nextListeners = currentListeners.slice() // nextListeners获取所有订阅列表
+      // 浅拷贝当前监听事件数组到nextListeners
+      nextListeners = currentListeners.slice() // nextListeners获取所有订阅列表，浅拷贝数组
     }
   }
 
@@ -75,7 +77,7 @@ export default function createStore(reducer, preloadedState, enhancer) {
    * @returns {any} 返回当前状态树给你的应用程序
    */
   function getState() {
-    if (isDispatching) { // 如果在订阅中不能读取状态
+    if (isDispatching) { // 不能在reducer中读取store数据
       throw new Error(
         'You may not call store.getState() while the reducer is executing. ' +
           'The reducer has already received the state as an argument. ' +
@@ -90,6 +92,7 @@ export default function createStore(reducer, preloadedState, enhancer) {
    * Adds a change listener. It will be called any time an action is dispatched,
    * and some part of the state tree may potentially have changed. You may then
    * call `getState()` to read the current state tree inside the callback.
+   * 添加一个监听器
    *
    * You may call `dispatch()` from a change listener, with the following
    * caveats:
@@ -114,7 +117,7 @@ export default function createStore(reducer, preloadedState, enhancer) {
       throw new Error('Expected the listener to be a function.')
     }
 
-    if (isDispatching) { // 如果在订阅中不能增加监听
+    if (isDispatching) { // 不能在reducer中订阅事件
       throw new Error(
         'You may not call store.subscribe() while the reducer is executing. ' +
           'If you would like to be notified after the store has been updated, subscribe from a ' +
@@ -133,8 +136,8 @@ export default function createStore(reducer, preloadedState, enhancer) {
       if (!isSubscribed) { // 不在订阅中不能取消
         return
       }
-      
-      if (isDispatching) { // 在订阅中时提示用户reducer执行后可能无法取消订阅
+
+      if (isDispatching) { // 在reducer执行中不能取消订阅
         throw new Error(
           'You may not unsubscribe from a store listener while the reducer is executing. ' +
             'See http://redux.js.org/docs/api/Store.html#subscribe for more details.'
@@ -189,21 +192,23 @@ export default function createStore(reducer, preloadedState, enhancer) {
       )
     }
 
-    if (isDispatching) { // 
+    if (isDispatching) { // 在reducer中不能调用dispatch
       throw new Error('Reducers may not dispatch actions.')
     }
 
+    // 调用reducer并且isDispatching调用状态设置为flase
+    // 这里使用try catch为了使线程复活 https://github.com/reactjs/redux/pull/372#issuecomment-369806261
     try {
       isDispatching = true
-      currentState = currentReducer(currentState, action)
+      currentState = currentReducer(currentState, action) // 调用reducers
     } finally {
       isDispatching = false
     }
-
+    // 当一个dispatch执行完毕后把nextListeners的引用赋值给currentListeners
     const listeners = (currentListeners = nextListeners)
     for (let i = 0; i < listeners.length; i++) {
       const listener = listeners[i]
-      listener()
+      listener() // 通知订阅事件
     }
 
     return action
@@ -211,6 +216,7 @@ export default function createStore(reducer, preloadedState, enhancer) {
 
   /**
    * Replaces the reducer currently used by the store to calculate the state.
+   * 可以使用该函数替换当前保存的store
    *
    * You might need this if your app implements code splitting and you want to
    * load some of the reducers dynamically. You might also need this if you

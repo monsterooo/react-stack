@@ -116,8 +116,9 @@ function assertReducerShape(reducers) {
  * passed object, and builds a state object with the same shape.
  */
 export default function combineReducers(reducers) {
-  const reducerKeys = Object.keys(reducers)
-  const finalReducers = {}
+  const reducerKeys = Object.keys(reducers) // 所有reducers的keys
+  const finalReducers = {} // 所有reducers
+  // 遍历一些检查
   for (let i = 0; i < reducerKeys.length; i++) {
     const key = reducerKeys[i]
 
@@ -131,6 +132,7 @@ export default function combineReducers(reducers) {
       finalReducers[key] = reducers[key]
     }
   }
+  // 检查后的 reducers keys
   const finalReducerKeys = Object.keys(finalReducers)
 
   let unexpectedKeyCache
@@ -144,7 +146,7 @@ export default function combineReducers(reducers) {
   } catch (e) {
     shapeAssertionError = e
   }
-
+  // currentReducer()为这个combination函数，一次执行对象中的每个函数
   return function combination(state = {}, action) {
     if (shapeAssertionError) {
       throw shapeAssertionError
@@ -162,20 +164,25 @@ export default function combineReducers(reducers) {
       }
     }
 
-    let hasChanged = false
-    const nextState = {}
+    let hasChanged = false // state是否修改，用于优化
+    const nextState = {} // 执行后的state对象
+    // 挨个执行所有的reducer
     for (let i = 0; i < finalReducerKeys.length; i++) {
-      const key = finalReducerKeys[i]
-      const reducer = finalReducers[key]
-      const previousStateForKey = state[key]
-      const nextStateForKey = reducer(previousStateForKey, action)
+      const key = finalReducerKeys[i] // 依次获取到每个reducers key
+      const reducer = finalReducers[key] // 依次获取到reducer
+      const previousStateForKey = state[key] // 拿到执行reducer前的state
+      const nextStateForKey = reducer(previousStateForKey, action) // 传入state和action执行当前reducer
+      // 所有reducers都不能返回一个undefined
       if (typeof nextStateForKey === 'undefined') {
         const errorMessage = getUndefinedStateErrorMessage(key, action)
         throw new Error(errorMessage)
       }
+      // 保存state
       nextState[key] = nextStateForKey
+      // 当然state对比上次state观察是否有改变state
       hasChanged = hasChanged || nextStateForKey !== previousStateForKey
     }
+    // 如果未改变state则返回新的state，否则返回老的state
     return hasChanged ? nextState : state
   }
 }

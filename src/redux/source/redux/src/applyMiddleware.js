@@ -18,6 +18,7 @@ import compose from './compose'
  */
 export default function applyMiddleware(...middlewares) {
   return createStore => (...args) => {
+    // 使用reducer, preloadedState重新创建store
     const store = createStore(...args)
     let dispatch = () => {
       throw new Error(
@@ -25,15 +26,20 @@ export default function applyMiddleware(...middlewares) {
           `Other middleware would not be applied to this dispatch.`
       )
     }
+    // 链栈
     let chain = []
-
+    // 中间件api，引用store的api
     const middlewareAPI = {
       getState: store.getState,
       dispatch: (...args) => dispatch(...args)
     }
+    // 执行中间件函数第一层，返回(next) => (action) => {}
+    // 传入 getState和dispatch给中间件调用，中间件会返回一个函数(next)它保存在chain中
     chain = middlewares.map(middleware => middleware(middlewareAPI))
+    // store.dispatch作为next的参数传入
+    // 这里执行中间件函数第二层，返回(action) => {}
     dispatch = compose(...chain)(store.dispatch)
-
+    // 返回的dispatch是中间件的函数(action) => {} 这样就会先进入中间件的执行
     return {
       ...store,
       dispatch
